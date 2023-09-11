@@ -1,0 +1,7 @@
+{
+  email youremail@domain.com
+}
+
+your-domain-here {
+  reverse_proxy localhost:3000
+}

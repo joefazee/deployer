@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  main-db:
+    image: postgres:12-alpine
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=secret
+      - POSTGRES_DB=deployer
+    ports:
+      - "5455:5432"
+  main-redis:
+    image: "redis:7-alpine"
+    ports:
+      - "6379:6379"
+    restart: always

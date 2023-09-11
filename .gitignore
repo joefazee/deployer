@@ -1,0 +1,6 @@
+.env
+bin
+tmp
+build-errors.log
+.vscode
+.vscode/

@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go go1.20.2
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.20
+        id: go
+
+      - name: Check out code into directory
+        uses: actions/checkout@v2
+
+      - name: Test
+        run: make audit
+
+      - name: build
+        run: make build
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          known_hosts: unnecessary
+
+      - name: Adding know hosts
+        run: ssh-keyscan -p ${{ vars.SSH_PORT }} -H ${{ matrix.server_ip }} >> ~/.ssh/known_hosts
+
+      - name: Copy binary
+        run: rsync -e "ssh -p ${{ vars.SSH_PORT }}" -P ./bin/linux_amd64/api ${{ vars.SSH_USER}}@${{matrix.server_ip}}:~
+
+      - name: Copy migrations
+        run: rsync -e "ssh -p ${{ vars.SSH_PORT }}" -rP ./pkg/db/migrations ${{ vars.SSH_USER}}@${{matrix.server_ip}}:~
+
+      - name: Copy Caddy File
+        run: rsync -e "ssh -p ${{ vars.SSH_PORT }}" -P ./scripts/Caddyfile ${{ vars.SSH_USER}}@${{matrix.server_ip}}:~
+
+      - name: Copy API service script
+        run: rsync -e "ssh -p ${{ vars.SSH_PORT }}" -P ./scripts/api.service ${{ vars.SSH_USER}}@${{matrix.server_ip}}:~
+
+      - name: Create .env and restart the server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{matrix.server_ip}}
+          username: ${{ vars.SSH_USER}}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          port: ${{ vars.SSH_PORT }}
+          script: |
+            echo $PWD
+            echo 'export DB_DSN="${{secrets.DB_DSN}}"' > ~/custom
+
+            echo "ENVIRONMENT=development" > .env
+            echo "DB_DRIVER=postgres" >> .env
+            echo "DB_SOURCE=${{secrets.DB_DSN}}" >> .env
+            echo "HTTP_SERVER_ADDRESS=0.0.0.0:3000" >> .env
+
+            source ~/custom
+            migrate -path=./migrations -database="$DB_DSN" up
+
+            sudo mv ~/api.service /etc/systemd/system
+            sudo systemctl enable api 
+            sudo systemctl restart api 
+
+            sudo mv ~/Caddyfile /etc/caddy
+            sudo systemctl reload caddy
