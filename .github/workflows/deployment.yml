@@ -10,6 +10,9 @@ jobs:
   build-and-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server_ip: [165.232.147.198, 159.223.207.145]
     steps:
       - name: Set up Go go1.20.2
         uses: actions/setup-go@v2
